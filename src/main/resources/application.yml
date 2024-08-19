@@ -1,0 +1,18 @@
+﻿server:
+  port: 8090
+spring:
+  application:
+    name: sample-delay-queue
+  redis:
+    host: app.wang1.cc
+    port: 9379
+    password: ljcmsgd
+    database: 0
+    timeout: 60s
+    lettuce:
+      pool:
+        max-active: 10
+        max-idle: 8
+        min-idle: 0
+        max-wait: 5s
+        enabled: true
