@@ -168,7 +168,7 @@ public class DelayQueue<T> {
     }
 
     /**
-     * 获取
+     * 获取（timeout < 0 时不会阻塞）
      * @author wang1
      * @param timeout 超时时间
      * @param timeUnit 时间单位

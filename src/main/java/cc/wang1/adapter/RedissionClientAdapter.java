@@ -39,7 +39,7 @@ public class RedissionClientAdapter implements RedisClientAdapter<String> {
 
     @Override
     public Item<String> lPoll(String zSet, long timeout, TimeUnit timeUnit) {
-        return redisClient.opsForList().leftPop(zSet, timeout, timeUnit);
+        return timeout < 0 ? redisClient.opsForList().leftPop(zSet) : redisClient.opsForList().leftPop(zSet, timeout, timeUnit);
     }
 
     @Override
