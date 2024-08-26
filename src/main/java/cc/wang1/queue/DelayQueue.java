@@ -30,6 +30,10 @@ public class DelayQueue<T> {
     private String delayQueueName;
     private String expiryQueueName;
     /**
+     * 时间增量
+     */
+    private long increment;
+    /**
      * 到期消息转移线程
      */
     private final Executor executor = new ThreadPoolExecutor(1, 1, Integer.MAX_VALUE, TimeUnit.DAYS,
@@ -43,39 +47,46 @@ public class DelayQueue<T> {
             },
             new ThreadPoolExecutor.AbortPolicy());;
     private volatile Thread transferThread;
+
     /**
      * 到期消息转移Lua脚本
      */
-    private static final String TRANSFER_SCRIPT =       "local zset_key = KEYS[1] " +
-                                                        "local list_key = KEYS[2] " +
-                                                        "local T = tonumber(ARGV[1]) " +
-                                                        "while T < T + 1000 do " +
-                                                        "local elements = redis.call('ZRANGEBYSCORE', zset_key, '-inf', T, 'WITHSCORES') " +
-                                                        "if #elements > 0 then " +
-                                                        "local num_elements = #elements / 2 " +
-                                                        "for i = 1, #elements, 2 do " +
-                                                        "local removed = redis.call('ZREM', zset_key, elements[i]) " +
-                                                        "if removed == 1 then " +
-                                                        "redis.call('RPUSH', list_key, elements[i]) " +
-                                                        "end " +
-                                                        "end " +
-                                                        "T = T + (num_elements * 5) " +
-                                                        "else " +
-                                                        "break " +
-                                                        "end " +
-                                                        "end " +
-                                                        "local first_element = redis.call('ZRANGE', zset_key, 0, 0, 'WITHSCORES') " +
-                                                        "if #first_element > 0 then " +
-                                                        "return tonumber(first_element[2]) " +
-                                                        "else " +
-                                                        "return -1 " +
-                                                        "end";
+    private static final String TRANSFER_SCRIPT =
+                    "local zset_key = KEYS[1] " +
+                    "local list_key = KEYS[2] " +
+                    "local T = tonumber(ARGV[1]) " +
+                    "local increment = tonumber(ARGV[2]) " +
+                    "local limit = T + 1000 " +
+                    "while T < limit do " +
+                    "    local elements = redis.call('ZRANGEBYSCORE', zset_key, '-inf', T, 'WITHSCORES') " +
+                    "    if #elements <= 0 then " +
+                    "        break " +
+                    "    end " +
+                    "    for i = 1, #elements, 2 do " +
+                    "        local removed = redis.call('ZREM', zset_key, elements[i]) " +
+                    "        if removed == 1 then " +
+                    "            redis.call('RPUSH', list_key, elements[i]) " +
+                    "        end " +
+                    "        T = T + increment " +
+                    "        if T >= limit then " +
+                    "            break " +
+                    "        end " +
+                    "    end " +
+                    "end " +
+                    "local first_element = redis.call('ZRANGE', zset_key, 0, 0, 'WITHSCORES') " +
+                    "if #first_element > 0 then " +
+                    "    return tonumber(first_element[2]) " +
+                    "else " +
+                    "    return -1 " +
+                    "end";
+
 
     private DelayQueue(){}
     public static class Builder<T> {
         private String name;
         private RedisClientAdapter<T> redisClient;
         private Supplier<Long> itemIdGenerator;
+        private long increment;
 
         public Builder<T> name(String name) {
             this.name = name;
@@ -92,6 +103,11 @@ public class DelayQueue<T> {
             return this;
         }
 
+        public Builder<T> increment(long increment) {
+            this.increment = increment;
+            return this;
+        }
+
         public DelayQueue<T> build() {
             if (name == null || name.isEmpty()) {
                 throw new RuntimeException("The delay queue name is required.");
@@ -102,12 +118,16 @@ public class DelayQueue<T> {
             if (itemIdGenerator == null) {
                 throw new RuntimeException("The itemIdGenerator is required.");
             }
+            if (increment <= 0) {
+                throw new RuntimeException("illegal increment, increment must gt 0.");
+            }
             DelayQueue<T> delayQueue = new DelayQueue<>();
             delayQueue.name = name;
             delayQueue.delayQueueName = "DELAY_QUEUE_" + name;
             delayQueue.expiryQueueName = "EXPIRY_QUEUE_" + name;
             delayQueue.redisClient = redisClient;
             delayQueue.itemIdGenerator = itemIdGenerator;
+            delayQueue.increment = increment;
 
             // 最后开启
             delayQueue.executor.execute(delayQueue::startTransfer);
@@ -168,7 +188,7 @@ public class DelayQueue<T> {
             try {
                 // 转移到期元素
                 // 获取下一个最近到期的元素
-                long timeout = redisClient.executeTransferScript(TRANSFER_SCRIPT, Arrays.asList(delayQueueName, expiryQueueName), System.currentTimeMillis());
+                long timeout = redisClient.executeTransferScript(TRANSFER_SCRIPT, Arrays.asList(delayQueueName, expiryQueueName), System.currentTimeMillis(), increment);
                 // 延迟消息队列为空
                 if (timeout < 0) {
                     LockSupport.park(this);

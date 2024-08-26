@@ -23,6 +23,7 @@ public class TestController {
                 .redisClient(redissionClientAdapter)
                 .name("test20240819235314")
                 .itemIdGenerator(System::currentTimeMillis)
+                .increment(5L)
                 .build();
     }
 
