@@ -46,33 +46,30 @@ public class DelayQueue<T> {
     /**
      * 到期消息转移Lua脚本
      */
-    private static final String TRANSFER_SCRIPT =   "local zset_key = KEYS[1] " +
-                                                    "local list_key = KEYS[2] " +
-                                                    "local T = tonumber(ARGV[1]) " +
-                                                    "while T < T + 1000 do " +
-                                                    "local elements = redis.call('ZRANGEBYSCORE', zset_key, '-inf', T, 'WITHSCORES') " +
-                                                    "if #elements > 0 then " +
-                                                    "local num_elements = #elements / 2 " +
-                                                    "for i = 1, #elements, 2 do " +
-                                                    "local removed = redis.call('ZREM', zset_key, elements[i]) " +
-                                                    "if removed == 1 then " +
-                                                    "redis.call('RPUSH', list_key, elements[i]) " +
-                                                    "end " +
-                                                    "end " +
-                                                    "T = T + (num_elements * 5) " +
-                                                    "else " +
-                                                    "break " +
-                                                    "end " +
-                                                    "end " +
-                                                    "if T >= T + 1000 then " +
-                                                    "local first_element = redis.call('ZRANGE', zset_key, 0, 0, 'WITHSCORES') " +
-                                                    "if #first_element > 0 then " +
-                                                    "return tonumber(first_element[2]) " +
-                                                    "else " +
-                                                    "return -1 " +
-                                                    "end " +
-                                                    "end " +
-                                                    "return -1";
+    private static final String TRANSFER_SCRIPT =       "local zset_key = KEYS[1] " +
+                                                        "local list_key = KEYS[2] " +
+                                                        "local T = tonumber(ARGV[1]) " +
+                                                        "while T < T + 1000 do " +
+                                                        "local elements = redis.call('ZRANGEBYSCORE', zset_key, '-inf', T, 'WITHSCORES') " +
+                                                        "if #elements > 0 then " +
+                                                        "local num_elements = #elements / 2 " +
+                                                        "for i = 1, #elements, 2 do " +
+                                                        "local removed = redis.call('ZREM', zset_key, elements[i]) " +
+                                                        "if removed == 1 then " +
+                                                        "redis.call('RPUSH', list_key, elements[i]) " +
+                                                        "end " +
+                                                        "end " +
+                                                        "T = T + (num_elements * 5) " +
+                                                        "else " +
+                                                        "break " +
+                                                        "end " +
+                                                        "end " +
+                                                        "local first_element = redis.call('ZRANGE', zset_key, 0, 0, 'WITHSCORES') " +
+                                                        "if #first_element > 0 then " +
+                                                        "return tonumber(first_element[2]) " +
+                                                        "else " +
+                                                        "return -1 " +
+                                                        "end";
 
     private DelayQueue(){}
     public static class Builder<T> {
