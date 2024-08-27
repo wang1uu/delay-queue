@@ -24,6 +24,7 @@ public class TestController {
                 .name("test20240819235314")
                 .itemIdGenerator(System::currentTimeMillis)
                 .increment(5L)
+                .batchSize(10L)
                 .build();
     }
 

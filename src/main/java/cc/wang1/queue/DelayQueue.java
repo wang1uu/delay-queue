@@ -34,6 +34,10 @@ public class DelayQueue<T> {
      */
     private long increment;
     /**
+     * 每批处理的到期元素个数
+     */
+    private long batchSize;
+    /**
      * 到期消息转移线程
      */
     private final Executor executor = new ThreadPoolExecutor(1, 1, Integer.MAX_VALUE, TimeUnit.DAYS,
@@ -57,28 +61,19 @@ public class DelayQueue<T> {
                     "local T = tonumber(ARGV[1]) " +
                     "local increment = tonumber(ARGV[2]) " +
                     "local limit = T + 1000 " +
+                    "local batch_size = tonumber(ARGV[3]) " +
                     "while T < limit do " +
-                    "    local elements = redis.call('ZRANGEBYSCORE', zset_key, '-inf', T, 'WITHSCORES') " +
-                    "    if #elements <= 0 then " +
-                    "        break " +
-                    "    end " +
+                    "    local elements = redis.call('ZRANGE', zset_key, '-inf', T, 'BYSCORE', 'WITHSCORES', 'LIMIT', 0, batch_size) " +
+                    "    if #elements <= 0 then break end " +
                     "    for i = 1, #elements, 2 do " +
                     "        local removed = redis.call('ZREM', zset_key, elements[i]) " +
-                    "        if removed == 1 then " +
-                    "            redis.call('RPUSH', list_key, elements[i]) " +
-                    "        end " +
+                    "        if removed == 1 then redis.call('RPUSH', list_key, elements[i]) end " +
                     "        T = T + increment " +
-                    "        if T >= limit then " +
-                    "            break " +
-                    "        end " +
+                    "        if T >= limit then break end " +
                     "    end " +
                     "end " +
                     "local first_element = redis.call('ZRANGE', zset_key, 0, 0, 'WITHSCORES') " +
-                    "if #first_element > 0 then " +
-                    "    return tonumber(first_element[2]) " +
-                    "else " +
-                    "    return -1 " +
-                    "end";
+                    "if #first_element > 0 then return tonumber(first_element[2]) else return -1 end;";
 
 
     private DelayQueue(){}
@@ -87,6 +82,7 @@ public class DelayQueue<T> {
         private RedisClientAdapter<T> redisClient;
         private Supplier<Long> itemIdGenerator;
         private long increment;
+        private long batchSize;
 
         public Builder<T> name(String name) {
             this.name = name;
@@ -107,6 +103,10 @@ public class DelayQueue<T> {
             this.increment = increment;
             return this;
         }
+        public Builder<T> batchSize(long batchSize) {
+            this.batchSize = batchSize;
+            return this;
+        }
 
         public DelayQueue<T> build() {
             if (name == null || name.isEmpty()) {
@@ -121,6 +121,9 @@ public class DelayQueue<T> {
             if (increment <= 0) {
                 throw new RuntimeException("illegal increment, increment must gt 0.");
             }
+            if (batchSize <= 0) {
+                throw new RuntimeException("illegal batchSize, batchSize must gt 0.");
+            }
             DelayQueue<T> delayQueue = new DelayQueue<>();
             delayQueue.name = name;
             delayQueue.delayQueueName = "DELAY_QUEUE_" + name;
@@ -128,6 +131,7 @@ public class DelayQueue<T> {
             delayQueue.redisClient = redisClient;
             delayQueue.itemIdGenerator = itemIdGenerator;
             delayQueue.increment = increment;
+            delayQueue.batchSize = batchSize;
 
             // 最后开启
             delayQueue.executor.execute(delayQueue::startTransfer);
@@ -188,7 +192,7 @@ public class DelayQueue<T> {
             try {
                 // 转移到期元素
                 // 获取下一个最近到期的元素
-                long timeout = redisClient.executeTransferScript(TRANSFER_SCRIPT, Arrays.asList(delayQueueName, expiryQueueName), System.currentTimeMillis(), increment);
+                long timeout = redisClient.executeTransferScript(TRANSFER_SCRIPT, Arrays.asList(delayQueueName, expiryQueueName), System.currentTimeMillis(), increment, batchSize);
                 // 延迟消息队列为空
                 if (timeout < 0) {
                     LockSupport.park(this);
