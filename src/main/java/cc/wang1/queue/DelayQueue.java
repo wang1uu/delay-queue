@@ -187,6 +187,7 @@ public class DelayQueue<T> {
      * 转移
      * @author wang1
      */
+    @SuppressWarnings("all")
     private void startTransfer() {
         while (true) {
             try {
