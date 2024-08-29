@@ -38,11 +38,16 @@ public class TestController {
 
     @GetMapping("/offer")
     public String offer(@RequestParam("v") String v, @RequestParam("e") Long e) {
-        boolean result = delayQueue.offer(System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(e), v);
+        long expire = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(e);
+
+        boolean result = delayQueue.offer(expire, v);
         if (!result) {
             throw new RuntimeException(String.format("消息 [%s] 投递时间 [%s] 投递失败", v, LocalDateTime.now()));
         }
-        return String.format("消息 [%s] 投递时间 [%s] 到期时间 [%s]", v, LocalDateTime.now(), LocalDateTime.now().plusSeconds(e));
+        return String.format("消息 [%s] 投递时间 [%s] 到期时间 [%s]",
+                v,
+                LocalDateTime.now(),
+                LocalDateTime.ofInstant(Instant.ofEpochMilli(expire), ZoneOffset.of("+8")));
     }
 
     @GetMapping("/poll")
