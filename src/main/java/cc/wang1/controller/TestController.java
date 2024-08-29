@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.concurrent.TimeUnit;
 
 @RestController
@@ -34,12 +37,23 @@ public class TestController {
     }
 
     @GetMapping("/offer")
-    public Boolean offer(@RequestParam("v") String v, @RequestParam("e") Long e) {
-        return delayQueue.offer(System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(e), v);
+    public String offer(@RequestParam("v") String v, @RequestParam("e") Long e) {
+        boolean result = delayQueue.offer(System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(e), v);
+        if (!result) {
+            throw new RuntimeException(String.format("消息 [%s] 投递时间 [%s] 投递失败", v, LocalDateTime.now()));
+        }
+        return String.format("消息 [%s] 投递时间 [%s] 到期时间 [%s]", v, LocalDateTime.now(), LocalDateTime.now().plusSeconds(e));
     }
 
     @GetMapping("/poll")
-    public Item<String> poll(@RequestParam("w") Long w) {
-        return delayQueue.poll(w, TimeUnit.SECONDS);
+    public String poll(@RequestParam("w") Long w) {
+        Item<String> result = delayQueue.poll(w, TimeUnit.SECONDS);
+        if (result == null) {
+            return "不存在到期消息";
+        }
+        return String.format("到期消息 [%s] 获取时间 [%s] 到期时间 [%s]",
+                result.getData(),
+                LocalDateTime.now(),
+                LocalDateTime.ofInstant(Instant.ofEpochMilli(result.getExpiry()), ZoneOffset.of("+8")));
     }
 }
