@@ -1,6 +1,7 @@
 package cc.wang1.controller;
 
 import cc.wang1.adapter.RedissionClientAdapter;
+import cc.wang1.dto.Result;
 import cc.wang1.queue.DelayQueue;
 import cc.wang1.queue.Item;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @RestController
@@ -37,28 +39,37 @@ public class TestController {
     }
 
     @GetMapping("/offer")
-    public String offer(@RequestParam("v") String v, @RequestParam("e") Long e) {
+    public Result offer(@RequestParam("v") String v, @RequestParam("e") Long e) {
         long expire = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(e);
-
         boolean result = delayQueue.offer(expire, v);
-        if (!result) {
-            throw new RuntimeException(String.format("消息 [%s] 投递时间 [%s] 投递失败", v, LocalDateTime.now()));
-        }
-        return String.format("消息 [%s] 投递时间 [%s] 到期时间 [%s]",
-                v,
-                LocalDateTime.now(),
-                LocalDateTime.ofInstant(Instant.ofEpochMilli(expire), ZoneOffset.of("+8")));
+
+        return Result.builder()
+                .result(result)
+                .message(v)
+                .deliveredTime(LocalDateTime.now())
+                .expire(LocalDateTime.ofInstant(Instant.ofEpochMilli(expire), ZoneOffset.of("+8")))
+                .expireTimestamp(expire)
+                .build();
     }
 
     @GetMapping("/poll")
-    public String poll(@RequestParam("w") Long w) {
+    public Result poll(@RequestParam("w") Long w) {
         Item<String> result = delayQueue.poll(w, TimeUnit.SECONDS);
+
         if (result == null) {
-            return "不存在到期消息";
+            return Result.builder().result(true).build();
         }
-        return String.format("到期消息 [%s] 获取时间 [%s] 到期时间 [%s]",
-                result.getData(),
-                LocalDateTime.now(),
-                LocalDateTime.ofInstant(Instant.ofEpochMilli(result.getExpiry()), ZoneOffset.of("+8")));
+
+        long touchedTimestamp = System.currentTimeMillis();
+        LocalDateTime touchedTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(touchedTimestamp), ZoneOffset.of("+8"));
+
+        return Result.builder()
+                .result(true)
+                .message(result.getData())
+                .touchedTime(touchedTime)
+                .touchedTimestamp(touchedTimestamp)
+                .expire(LocalDateTime.ofInstant(Instant.ofEpochMilli(result.getExpiry()), ZoneOffset.of("+8")))
+                .expireTimestamp(result.getExpiry())
+                .build();
     }
 }
